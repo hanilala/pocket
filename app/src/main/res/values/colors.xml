@@ -25,4 +25,8 @@
     <color name="blue_semi_transparent">#805677fc</color>
     <color name="blue_semi_transparent_pressed">#80738ffe</color>
 
+    <color name="translucence">#b0000000</color>
+    <color name="dialog_line">#8F999999</color>
+
+
 </resources>

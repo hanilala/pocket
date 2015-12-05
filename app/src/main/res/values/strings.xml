@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Material</string>
+    <string name="app_name">PocketMD</string>
 
     <string name="action_settings">Settings</string>
 
@@ -86,6 +86,7 @@
     <string name="newsTitlse" >探班颜值最高剧组——《栀子花开》！探班颜值</string>
     <string name="newsSource" >冷笑话精选</string>
 
+    <string name="operation">操作</string>
 
     <string name="xlistview_header_hint_normal">下拉刷新</string>
     <string name="xlistview_header_hint_ready">松开刷新数据</string>

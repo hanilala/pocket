@@ -161,7 +161,6 @@ public class MovieFragment extends Fragment {
             Glide.with(MovieFragment.this)
                     .load(subject.getImages().getLarge())
                     .centerCrop()
-                    .placeholder(R.drawable.book2)
                     .crossFade()
                     .into(holder.ivMovie);
 

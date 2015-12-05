@@ -14,6 +14,7 @@ import android.widget.Toast;
 
 import com.lala.hani.pocket.book.BooksFragment;
 import com.lala.hani.pocket.movie.MovieFragment;
+import com.lala.hani.pocket.music.MusicFmt;
 import com.lala.hani.pocket.news.NewsFragment;
 import com.lala.hani.pocket.widget.BackHandledFragment;
 
@@ -122,21 +123,21 @@ public class MainActivity extends AppCompatActivity implements BackHandledFragme
                             case R.id.navigation_item_book:
                                 switchToBook();
                                 break;
-                            case R.id.navigation_item_example:
+                            /*case R.id.navigation_item_example:
                                 switchToExample();
-                                break;
-                           /* case R.id.navigation_item_blog:
-                                switchToBlog();
                                 break;*/
+                            case R.id.navigation_item_music:
+                                switchToMusic();
+                                break;
                             case R.id.navigation_item_news:
                                 switchToNews();
                                 break;
                             case R.id.navigation_item_movie:
                                 switchToMovie();
                                 break;
-                            case R.id.navigation_item_about:
+                            /*case R.id.navigation_item_about:
                                 switchToAbout();
-                                break;
+                                break;*/
 
                         }
                         menuItem.setChecked(true);
@@ -144,6 +145,13 @@ public class MainActivity extends AppCompatActivity implements BackHandledFragme
                         return true;
                     }
                 });
+    }
+
+    private void switchToMusic() {
+
+        getSupportFragmentManager().beginTransaction().replace(R.id.frame_content, new MusicFmt()).commit();
+        mToolbar.setTitle(R.string.navigation_music);
+
     }
 
 
