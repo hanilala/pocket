@@ -11,7 +11,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Color;
 import android.media.AudioManager;
-import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Vibrator;
 import android.support.annotation.Nullable;
@@ -36,18 +35,8 @@ import android.widget.Toast;
 
 import com.lala.hani.pocket.R;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
+import java.util.LinkedList;
 
 /**
  * Created by Administrator on 2015/09/26.
@@ -67,9 +56,9 @@ public class MusicFmt extends Fragment {
 
     private int currentItem;
 
-
+/*
     private List<String> audioList = new ArrayList<String>();
-    private LinkedHashMap<String, String> map = new LinkedHashMap<String, String>();
+    private LinkedHashMap<String, String> map = new LinkedHashMap<String, String>();*/
 
 
     private ListView listView;
@@ -79,13 +68,14 @@ public class MusicFmt extends Fragment {
     private Button playMusic, preMusic, nextMusic, playQueue;
     private ImageButton ibtn_player_voice;
 
-    private ArrayAdapter<String> adapter = null;
+    private MusicAdapter adapter = null;
 
 
     private int currentDuration;
 
     private boolean isPlaying, isPause;
 
+    private int playType=MusicApp.PLAY_ORDER_LINE;
 
     RelativeLayout ll_player_voice;    //音量控制面板布局
 
@@ -97,24 +87,17 @@ public class MusicFmt extends Fragment {
 
     int currentVolume, maxVolume;
 
+    public static LinkedList<Music> mLinkedList=null;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        File file = new File(getActivity().getFilesDir(), fileName);
 
 
-        Log.w("MusicFmt","onCreate");
+        mLinkedList=MusicApp.getMusicData(getActivity());
 
-        if (!file.exists()) {
-
-            new writeFileName().execute();
-        } else {
-
-            new getFileName().execute();
-        }
-
-        adapter = new ArrayAdapter<String>(getActivity(), android.R.layout.simple_list_item_1, audioList);
+        adapter = new MusicAdapter(getActivity(),mLinkedList);
 
 
         //音量调节面板显示和隐藏的动画
@@ -126,6 +109,7 @@ public class MusicFmt extends Fragment {
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction(MusicApp.MUSIC_CURRENT);
         intentFilter.addAction(MusicApp.MUSIC_DURATION);
+        intentFilter.addAction(MusicApp.MUSIC_NEXT);
         getActivity().registerReceiver(playerReceiver, intentFilter);
 
         am = (AudioManager) getActivity().getSystemService(Context.AUDIO_SERVICE);
@@ -139,11 +123,27 @@ public class MusicFmt extends Fragment {
     }
 
     @Override
+    public void onStop() {
+        super.onStop();
+
+        Log.w("MusicFmt", "onStop()");
+
+
+        MusicPref.setMusicStatus(getActivity(), MusicApp.PLAY_STATUS, isPlaying);
+        MusicPref.setMusicStatus(getActivity(), MusicApp.PAUSE_STATUS, isPause);
+
+        MusicPref.setMusicItem(getActivity(), currentItem);
+        MusicPref.save(getActivity(),MusicApp.MUSIC_PLAY_TYPE,playType);
+
+
+
+    }
+
+    @Override
     public void onDestroy() {
         super.onDestroy();
         getActivity().unregisterReceiver(playerReceiver);
         Log.w("MusicFmt", "onDestroy()");
-        onSaveInstanceState(new Bundle());
     }
 
     public void findViewById(View view) {
@@ -165,7 +165,7 @@ public class MusicFmt extends Fragment {
         playMusic = (Button) view.findViewById(R.id.play_music);
         nextMusic = (Button) view.findViewById(R.id.next_music);
         preMusic = (Button) view.findViewById(R.id.previous_music);
-        playQueue = (Button) view.findViewById(R.id.play_queue);
+        playQueue = (Button) view.findViewById(R.id.play_type);
         ibtn_player_voice = (ImageButton) view.findViewById(R.id.ibtn_player_voice);
         ll_player_voice = (RelativeLayout) view.findViewById(R.id.ll_player_voice);
 
@@ -178,15 +178,21 @@ public class MusicFmt extends Fragment {
         nextMusic.setOnClickListener(viewOnclickListener);
         preMusic.setOnClickListener(viewOnclickListener);
         ibtn_player_voice.setOnClickListener(viewOnclickListener);
+        playQueue.setOnClickListener(viewOnclickListener);
 
     }
+
+
+
 
 
     @Nullable
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
 
-        View rootView = inflater.inflate(R.layout.music_main_my, container, false);
+        View rootView = inflater.inflate(R.layout.fragment_music, container, false);
+
+
 
         findViewById(rootView);
 
@@ -213,15 +219,22 @@ public class MusicFmt extends Fragment {
         setViewOnclickListener();
 
 
-        if (savedInstanceState != null) {
-            String finalPro = savedInstanceState.getString("finalTime");
-            finalProgress.setText(finalPro);
-            Log.w("MusicFmt", "finalPro is :"+finalPro);
+        Log.w("MusicFmt", "onCreateView()");
 
+        if(PlayService.totalDuration!=0)
+        {
+            musicSeekBar.setMax((int)PlayService.totalDuration);
+            finalProgress.setText(MusicApp.formatTime(PlayService.totalDuration));
+
+
+            isPlaying=MusicPref.isPlaying(getActivity());
+            isPause=MusicPref.isPause(getActivity());
+
+            currentItem=MusicPref.musicCurItem(getActivity());
+
+            playType=MusicPref.getInt(getActivity(),MusicApp.MUSIC_PLAY_TYPE);
 
         }
-
-        Log.w("MusicFmt", "onCreateView()");
 
         return rootView;
 
@@ -248,8 +261,9 @@ public class MusicFmt extends Fragment {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
                 if (position == 0) {
-                    final String musicName = audioList.get(whereIs);
-                    final String path = map.get(musicName);
+                    final String musicName = mLinkedList.get(whereIs).getSongTitle();
+                    final int songId = mLinkedList.get(whereIs).getId();
+                    final String  path=mLinkedList.get(whereIs).getSongUrl();
                     AlertDialog.Builder dialog = new AlertDialog.Builder(getActivity());
                     dialog.setTitle("操作");
                     dialog.setMessage("确认删除" + musicName + "?");
@@ -260,8 +274,10 @@ public class MusicFmt extends Fragment {
                             File file = new File(path);
                             if (file.exists()) {
                                 file.delete();
-                                audioList.remove(whereIs);
-                                map.remove(musicName);
+                                MusicApp.deleteSong(getActivity(), songId);
+                                mLinkedList.remove(whereIs);
+                                Intent i=new Intent(Intent.ACTION_MEDIA_SCANNER_STARTED);
+                                getActivity().sendBroadcast(i);
                                 adapter.notifyDataSetChanged();
 
                             }
@@ -296,14 +312,14 @@ public class MusicFmt extends Fragment {
         super.onViewStateRestored(savedInstanceState);
 //        String si=savedInstanceState.getString("finalTime");
 //        finalProgress.setText(si);
-//        Log.w("MusicFmt", "finalPro is :" + si);
+        Log.w("MusicFmt", "onViewStateRestored is " );
 
 
     }
 
     public void playMusic(int position) {
 
-        Intent playIntent = new Intent(MusicApp.launchService);
+        Intent playIntent = new Intent(getActivity(),PlayService.class);
         playIntent.putExtra("currentItem", position);
         playIntent.putExtra("MSG", MusicApp.PLAY_MUSIC);
         getActivity().startService(playIntent);
@@ -317,8 +333,14 @@ public class MusicFmt extends Fragment {
 
         @Override
         public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+
+            Log.w("MusicFmt","position is :"+position);
+
+            playMusic.setBackgroundResource(R.mipmap.play);
             currentItem = position;
             playMusic(currentItem);
+
+
         }
     }
 
@@ -333,33 +355,33 @@ public class MusicFmt extends Fragment {
                 case R.id.play_music: {
 
                     if (isPlaying) {
-                        Intent intent = new Intent();
-                        intent.setAction(MusicApp.launchService);
+                        Intent intent = new Intent(getActivity(),PlayService.class);
+
                         intent.putExtra("MSG", MusicApp.PAUSE_MUSIC);
                         getActivity().startService(intent);
-                        playMusic.setBackgroundResource(R.drawable.play_selector);
 
-//                        getActivity().sendBroadcast(intent);
                         isPlaying = false;
                         isPause = true;
+
+                        playMusic.setBackgroundResource(R.mipmap.pause);
+
 
                         Log.w("MusicFmt", "after judge  isPlaying is:" + isPlaying);
                         Log.w("MusicFmt", "after judge  isPause is:" + isPause);
 
 
                     } else if (isPause) {
-                        Intent intentP = new Intent();
-                        intentP.setAction(MusicApp.launchService);
-                        playMusic.setBackgroundResource(R.drawable.play_selector);
+                        Intent intentP = new Intent(getActivity(),PlayService.class);
 
-//                        intent.putExtra("currentItem", currentItem);
-//                        intentP.putExtra("currentDuration",currentDuration);
                         intentP.putExtra("MSG", MusicApp.COTINUNE_MUSIC);
                         getActivity().startService(intentP);
 //                        getActivity().sendBroadcast(intentP);
 
                         isPlaying = true;
                         isPause = false;
+
+                        playMusic.setBackgroundResource(R.mipmap.play);
+
 
                         Log.w("MusicFmt", "after judge  isPlaying is:" + isPlaying);
                         Log.w("MusicFmt", "after judge  isPause is:" + isPause);
@@ -370,12 +392,13 @@ public class MusicFmt extends Fragment {
                 case R.id.previous_music: {
                     currentItem--;
                     if (currentItem < 0) {
-                        currentItem = audioList.size() - 1;
+                        currentItem =mLinkedList.size() - 1;
                     }
 
-                    Toast.makeText(getActivity(), audioList.get(currentItem), Toast.LENGTH_SHORT).show();
+                    Toast.makeText(getActivity(),
+                            mLinkedList.get(currentItem).getSongTitle(), Toast.LENGTH_SHORT).show();
 
-                    Intent preInt = new Intent(MusicApp.launchService);
+                    Intent preInt = new Intent(getActivity(),PlayService.class);
                     preInt.putExtra("currentItem", currentItem);
                     preInt.putExtra("MSG", MusicApp.PLAY_MUSIC);
                     getActivity().startService(preInt);
@@ -383,12 +406,14 @@ public class MusicFmt extends Fragment {
                 }
                 case R.id.next_music: {
                     currentItem++;
-                    if (currentItem > audioList.size() - 1) {
+                    if (currentItem >mLinkedList.size() - 1) {
                         currentItem = 0;
-                        Toast.makeText(getActivity(), audioList.get(currentItem), Toast.LENGTH_SHORT).show();
+                        Toast.makeText(getActivity(),
+                                mLinkedList.get(currentItem).getSongTitle(), Toast.LENGTH_SHORT).show();
 
                     }
-                    Toast.makeText(getActivity(), audioList.get(currentItem), Toast.LENGTH_SHORT).show();
+                    Toast.makeText(getActivity(),
+                            mLinkedList.get(currentItem).getSongTitle(), Toast.LENGTH_SHORT).show();
 
                     Intent nexInt = new Intent(MusicApp.launchService);
                     nexInt.putExtra("currentItem", currentItem);
@@ -400,6 +425,28 @@ public class MusicFmt extends Fragment {
                 case R.id.ibtn_player_voice: {
                     Log.w("MusicFmt", "next voicePanelAnimation()");
                     voicePanelAnimation();
+                    break;
+                }
+                case R.id.play_type:
+                {
+                    if(playType==MusicApp.PLAY_ORDER_LINE)
+                    {
+                        playQueue.setBackgroundResource(R.mipmap.repeat_current);
+                        playType=MusicApp.PLAY_ORDER_CIRCLE;
+                        Toast.makeText(getActivity(),"单曲循环",500).show();
+
+
+                    }
+                    else {
+                        playQueue.setBackgroundResource(R.mipmap.repeat_all);
+
+                        playType=MusicApp.PLAY_ORDER_LINE;
+                        Toast.makeText(getActivity(),"顺序播放",500).show();
+
+                    }
+                    Intent i=new Intent(MusicApp.MUSIC_TYPE_UPDATE);
+                    i.putExtra("playType",playType);
+                    getActivity().sendBroadcast(i);
                     break;
                 }
 
@@ -423,8 +470,9 @@ public class MusicFmt extends Fragment {
     }
 
     public void audioTrackChange(int progress) {
-        Intent i = new Intent(MusicApp.launchService);
+        Intent i = new Intent(getActivity(),PlayService.class);
         i.putExtra("MSG", MusicApp.PROGRESS_CHAGE);
+        i.putExtra("currentItem",currentItem);
         i.putExtra("currentDuration", progress);
         getActivity().startService(i);
     }
@@ -463,133 +511,6 @@ public class MusicFmt extends Fragment {
         }
     }
 
-    class writeFileName extends AsyncTask<Void, Void, Void> {
-
-
-        @Override
-        protected void onPreExecute() {
-
-            progressDialog = new ProgressDialog(getActivity());
-
-            progressDialog.setMessage("正在加载歌曲...");
-
-            progressDialog.setTitle("请稍等");
-            progressDialog.setCancelable(false);
-            progressDialog.show();
-
-        }
-
-        @Override
-        protected Void doInBackground(Void... params) {
-
-            getFiles("/sdcard/");
-
-            return null;
-        }
-
-
-        protected void getFiles(String path) {
-            File files = new File(path);
-            File[] file = files.listFiles();
-
-
-            try {
-                for (File f : file) {
-                    if (f.isDirectory()) {
-                        getFiles(f.getAbsolutePath());
-                    } else {
-                        if (isAudioFile(f.getPath())) {
-                            writeMusicName(f.getPath());
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-
-
-        protected synchronized void writeMusicName(String path) {
-            try {
-                FileOutputStream fos = getActivity().openFileOutput(fileName, Context.MODE_APPEND);
-                BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(fos));
-                bw.write(path);
-
-                audioList.add(path.substring(path.lastIndexOf('/') + 1));
-                map.put(path.substring(path.lastIndexOf('/') + 1), path);
-
-                bw.newLine();
-                bw.flush();
-                bw.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-
-
-        protected boolean isAudioFile(String path) {
-            for (String format : imageFormatSet) {
-                if (path.endsWith(format)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-
-        @Override
-        protected void onPostExecute(Void aVoid) {
-
-            progressDialog.dismiss();
-
-        }
-    }
-
-
-    class getFileName extends AsyncTask<Void, Void, Void> {
-
-
-        @Override
-        protected void onPreExecute() {
-            progressDialog = new ProgressDialog(getActivity());
-
-            progressDialog.setMessage("正在获取歌曲列表...");
-            progressDialog.setTitle("请稍等");
-            progressDialog.setCancelable(false);
-            progressDialog.show();
-        }
-
-        @Override
-        protected Void doInBackground(Void... params) {
-
-            try {
-
-                FileInputStream fis = getActivity().openFileInput(fileName);
-                BufferedReader br = new BufferedReader(new InputStreamReader(fis));
-
-                String line = "";
-
-                while ((line = br.readLine()) != null) {
-                    map.put(line.substring(line.lastIndexOf("/") + 1), line);
-                    audioList.add(line.substring(line.lastIndexOf('/') + 1));
-                }
-
-            } catch (FileNotFoundException e) {
-                e.printStackTrace();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-
-            return null;
-        }
-
-
-        @Override
-        protected void onPostExecute(Void LinkedMap) {
-            progressDialog.dismiss();
-
-        }
-    }
 
 
     class PlayerReceiver extends BroadcastReceiver {
@@ -607,6 +528,11 @@ public class MusicFmt extends Fragment {
                 currentDuration = intent.getIntExtra("currentDuration", -1);
                 currentProgress.setText(MusicApp.formatTime(currentDuration));
                 musicSeekBar.setProgress(currentDuration);
+            }
+            else if(action.equals(MusicApp.MUSIC_NEXT))
+            {
+                currentItem=intent.getIntExtra("currentItem",-1);
+
             }
 
 

@@ -1,8 +1,10 @@
 package com.lala.hani.pocket.music;
 
 import android.app.Service;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.media.MediaPlayer;
 import android.os.Handler;
 import android.os.IBinder;
@@ -18,6 +20,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedList;
 import java.util.List;
 
 /**
@@ -34,17 +37,17 @@ public class PlayService extends Service {
 
     private int currentDuration;
 
-    private int totalDuration;
+    public static long totalDuration=0;
 
-
-
-    private List<String> audioList;
-
-    private LinkedHashMap<String, String> map;
+    private  PlayerServiceReceiver mPlayerServiceReceiver;
+    private IntentFilter mIntentFilter;
 
     private boolean isPauseS;
 
+    private static LinkedList<Music> mLinkedList=null;
 
+
+    private int playType=MusicApp.PLAY_ORDER_LINE;
 //    private PlayerReceiver playerReceiver;
 
 
@@ -76,24 +79,30 @@ public class PlayService extends Service {
 
         mediaPlayer = new MediaPlayer();
 
-        audioList = new ArrayList<>();
-        map = new LinkedHashMap<>();
 
-        getMusicName();
+        mLinkedList=MusicFmt.mLinkedList;
 
+
+        mPlayerServiceReceiver=new PlayerServiceReceiver();
+        mIntentFilter=new IntentFilter();
+        mIntentFilter.addAction(MusicApp.MUSIC_TYPE_UPDATE);
+
+        registerReceiver(mPlayerServiceReceiver,mIntentFilter);
 
         mediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
             @Override
             public void onCompletion(MediaPlayer mp) {
+
+                if(playType==MusicApp.PLAY_ORDER_LINE)
                 nextMusic();
+                else if(playType==MusicApp.PLAY_ORDER_CIRCLE)
+                {
+                circleMusic();
+                }
             }
         });
 
-      /*  playerReceiver=new PlayerReceiver();  //ͨ���㲥�������ֵ���ͣ����ʼ��
-        IntentFilter filter=new IntentFilter();
-        filter.addAction(MusicApp.MUSIC_PAUSE);
-        filter.addAction(MusicApp.MUSIC_CONTINUE);
-        registerReceiver(playerReceiver,filter);*/
+
 
         // �����������¼�
         TelephonyManager telManager = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE); // ��ȡϵͳ����
@@ -103,27 +112,13 @@ public class PlayService extends Service {
     }
 
 
-    public void getMusicName() {
-        try {
-            FileInputStream fis = getApplicationContext().openFileInput(MusicApp.fileName);
-            BufferedReader br = new BufferedReader(new InputStreamReader(fis));
-
-            String line = "";
-
-            try {
-                while ((line = br.readLine()) != null) {
-                    map.put(line.substring(line.lastIndexOf("/") + 1), line);
-                    audioList.add(line.substring(line.lastIndexOf('/') + 1));
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-
-
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        }
+    public void circleMusic()
+    {
+        play(0);
     }
+
+
+
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -134,8 +129,16 @@ public class PlayService extends Service {
 
         switch (msg) {
             case MusicApp.PLAY_MUSIC: {
-                path = map.get(audioList.get(currentItem));
-                play(0);
+                path =mLinkedList.get(currentItem).getSongUrl();
+                if(path!=null)
+                {
+                    play(0);
+
+                }
+                else
+                {
+                    nextMusic();
+                }
                 break;
 
             }
@@ -157,7 +160,7 @@ public class PlayService extends Service {
             }
             case MusicApp.PROGRESS_CHAGE:
             {
-                currentDuration=intent.getIntExtra("currentDuration",0);
+                currentDuration = intent.getIntExtra("currentDuration",0);
                 play(currentDuration);
                 break;
             }
@@ -195,12 +198,27 @@ public class PlayService extends Service {
     public void nextMusic()
     {
         currentItem++;
-        if(currentItem>audioList.size()-1)
+        if(currentItem>mLinkedList.size()-1)
         {
             currentItem=0;
         }
-        path=map.get(audioList.get(currentItem));
-        play(0);
+
+        path=mLinkedList.get(currentItem).getSongUrl();
+        if(path!=null)
+        {
+            play(0);
+            Intent i=new Intent(MusicApp.MUSIC_NEXT);
+            i.putExtra("currentItem",currentItem);
+            sendBroadcast(i);
+        }
+        else
+        {
+            nextMusic();
+
+        }
+
+
+
     }
 
     @Override
@@ -210,8 +228,9 @@ public class PlayService extends Service {
             mediaPlayer.release();
             mediaPlayer = null;
         }
+        unregisterReceiver(mPlayerServiceReceiver);
+        MusicPref.clearData(getApplicationContext());
 
-//        unregisterReceiver(playerReceiver);
     }
 
 
@@ -233,25 +252,15 @@ public class PlayService extends Service {
 
 
 
-   /* class PlayerReceiver extends BroadcastReceiver
-    {
+   class PlayerServiceReceiver extends BroadcastReceiver
+   {
 
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            String action=intent.getAction();
+       @Override
+       public void onReceive(Context context, Intent intent) {
 
-            if(action.equals(MusicApp.MUSIC_PAUSE))
-            {
-                pause();
-            }
-            else if(action.equals(MusicApp.MUSIC_CONTINUE))
-            {
-                currentDuration=intent.getIntExtra("currentDuration",0);
-                continueMusic();
-            }
-
-        }
-    }*/
+           playType=intent.getIntExtra("playType",1);
+       }
+   }
 
 
 
@@ -295,7 +304,8 @@ public class PlayService extends Service {
             Intent intent = new Intent();
             intent.setAction(MusicApp.MUSIC_DURATION);
             totalDuration = mediaPlayer.getDuration();
-            intent.putExtra("totalDuration", totalDuration);    //ͨ��Intent�����ݸ������ܳ���
+            int duration=(int )totalDuration;
+            intent.putExtra("totalDuration", duration);    //ͨ��Intent�����ݸ������ܳ���
             sendBroadcast(intent);
         }
     }

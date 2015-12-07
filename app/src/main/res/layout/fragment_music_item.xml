@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+     android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+
+    <RelativeLayout
+        android:paddingLeft="10dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:paddingRight="10dp"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <TextView
+            android:id="@+id/songTitle"
+            android:layout_alignParentLeft="true"
+            android:text="友情岁月"
+            android:textSize="20sp"
+            android:ellipsize="end"
+            android:lines="1"
+            android:layout_width="300dp"
+            android:layout_height="wrap_content" />
+
+
+        <TextView
+            android:id="@+id/songArtist"
+            android:layout_below="@+id/songTitle"
+            android:layout_marginTop="5dp"
+            android:textSize="12sp"
+            android:text="胡歌"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+
+        <TextView
+            android:id="@+id/songDuration"
+            android:layout_alignParentRight="true"
+            android:text="2:53"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+
+    </RelativeLayout>
+
+
+
+</RelativeLayout>
